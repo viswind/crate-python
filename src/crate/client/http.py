@@ -36,6 +36,7 @@ from decimal import Decimal
 import calendar
 import threading
 import re
+import base64
 from six.moves.urllib.parse import urlparse
 from crate.client.exceptions import (
     ConnectionError,
@@ -92,6 +93,11 @@ class Server(object):
 
     def __init__(self, server, **kwargs):
         self.pool = urllib3.connection_from_url(server, **kwargs)
+        self.authorization_header = None
+        match = re.match("^https?://(?P<username>.+):(?P<password>.+)@", server)
+        if match:
+            auth = '{0}:{1}'.format(match.group('username'),match.group('password'))
+            self.authorization_header = 'Basic {0}'.format(base64.b64encode(auth.encode()).decode())
 
     def request(self,
                 method,
@@ -111,6 +117,8 @@ class Server(object):
             if length is not None:
                 headers['Content-Length'] = length
         headers['Accept'] = 'application/json'
+        if self.authorization_header:
+            headers['Authorization'] = self.authorization_header
         kwargs['assert_same_host'] = False
         kwargs['redirect'] = False
         kwargs['retries'] = Retry(read=0)
