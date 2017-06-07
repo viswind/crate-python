@@ -5,6 +5,21 @@ Changes for crate
 Unreleased
 ==========
 
+2017/05/18 0.19.3
+=================
+
+ - Fix bulk updates which were broken due to query rewrites.
+
+
+2017/04/28 0.19.2
+=================
+
+ - Output logs in test-layer in case when CrateDB instance does not start in
+   time.
+
+ - Increased the default timeout for the test-layer startup to avoid timeouts 
+   on slow hosts.
+
 2017/02/27 0.19.1
 =================
 

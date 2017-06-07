@@ -28,7 +28,7 @@ CrateDB Python Client
 
 |
 
-A Python database client library for CrateDB_.
+A Python client library for CrateDB_.
 
 This library:
 
@@ -58,7 +58,7 @@ To update, run::
 Contributing
 ============
 
-This project is primarily maintained by `Crate.io`_, but we welcome community
+This project is primarily maintained by Crate.io_, but we welcome community
 contributions!
 
 See the `developer docs`_ and the `contribution docs`_ for more information.
@@ -76,7 +76,7 @@ Looking for more help?
 .. _contribution docs: CONTRIBUTING.rst
 .. _Crate.io: http://crate.io/
 .. _CrateDB: https://github.com/crate/crate
-.. _DB API 2.0: http://www.python.org/dev/peps/pep-0249/>
+.. _DB API 2.0: http://www.python.org/dev/peps/pep-0249/
 .. _developer docs: DEVELOP.rst
 .. _paid support: https://crate.io/pricing/
 .. _pip: https://pypi.python.org/pypi/pip
