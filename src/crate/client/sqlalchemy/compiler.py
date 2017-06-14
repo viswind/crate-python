@@ -119,6 +119,12 @@ class CrateDDLCompiler(compiler.DDLCompiler):
             return special_options + ' WITH ({0})'.format(
                 ', '.join(sorted(table_opts)))
         return special_options
+        
+    def visit_primary_key_constraint(self, constraint):
+        # Crate does not support named primary key constraints
+        constraint.name = None
+        return super(CrateDDLCompiler, self).\
+            visit_primary_key_constraint(constraint)
 
 
 class CrateTypeCompiler(compiler.GenericTypeCompiler):
