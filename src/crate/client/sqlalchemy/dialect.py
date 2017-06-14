@@ -173,7 +173,10 @@ class CrateDialect(default.DefaultDialect):
         pass
 
     def connect(self, host=None, port=None, *args, **kwargs):
-        username, password = kwargs.pop('username'), kwargs.pop('password')
+        if 'username' in kwargs:
+            username, password = kwargs.pop('username'), kwargs.pop('password')
+        else:
+            username, password = None, None
         server = None
         if host:
             server = '{0}:{1}'.format(host, port or '4200')
