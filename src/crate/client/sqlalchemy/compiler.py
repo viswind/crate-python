@@ -120,6 +120,10 @@ class CrateDDLCompiler(compiler.DDLCompiler):
                 ', '.join(sorted(table_opts)))
         return special_options
         
+    def visit_foreign_key_constraint(self, constraint):
+        # Crate does not support foreign key constraints
+        return None
+        
     def visit_primary_key_constraint(self, constraint):
         # Crate does not support named primary key constraints
         constraint.name = None
