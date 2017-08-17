@@ -273,6 +273,15 @@ class CrateCompiler(compiler.SQLCompiler):
         else:
             text += " VALUES (%s)" % \
                 ', '.join([c[1] for c in crud_params])
+        
+        if self.update_on_duplicate:
+            to_update = []
+            for col, val in crud_params:
+                if not col.primary_key:
+                    to_update.append("%s = VALUES(%s)" % (col.name, col.name))
+                    
+            text += " ON DUPLICATE KEY UPDATE %s" % ', '.join(to_update)
+        
 
         if self.returning and not self.returning_precedes_values:
             text += " " + returning_clause

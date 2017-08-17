@@ -173,6 +173,10 @@ class CrateDialect(default.DefaultDialect):
         pass
 
     def connect(self, host=None, port=None, *args, **kwargs):
+        if 'update_on_duplicate' in kwargs:
+            self.statement_compiler.update_on_duplicate = kwargs.pop('update_on_duplicate')
+        else:
+            self.statement_compiler.update_on_duplicate = False
         if 'username' in kwargs:
             username, password = kwargs.pop('username'), kwargs.pop('password')
         else:
