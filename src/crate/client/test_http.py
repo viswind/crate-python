@@ -24,23 +24,27 @@ import time
 import multiprocessing
 import sys
 import os
-from .compat import queue
+import queue
 import random
 import traceback
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from unittest import TestCase
-from mock import patch, MagicMock
+from unittest.mock import patch, MagicMock
 from threading import Thread, Event
 from multiprocessing import Process
 from decimal import Decimal
 import datetime as dt
 import urllib3.exceptions
+from base64 import b64decode
+from urllib.parse import urlparse, parse_qs
+from setuptools.ssl_support import find_ca_bundle
 
 from .http import Client, _remove_certs_for_non_https
 from .exceptions import ConnectionError, ProgrammingError
-from .compat import xrange, BaseHTTPServer, to_bytes
 
 
 REQUEST = 'crate.client.http.Server.request'
+CA_CERT_PATH = find_ca_bundle()
 
 
 def fake_request(response=None):
@@ -110,7 +114,7 @@ class HttpClientTest(TestCase):
         try:
             client.sql('select 1')
         except ProgrammingError as e:
-            self.assertEquals("this shouldn't be raised", e.message)
+            self.assertEqual("this shouldn't be raised", e.message)
         else:
             self.assertTrue(False)
         finally:
@@ -289,7 +293,7 @@ class ThreadSafeHttpClientTest(TestCase):
     def _run(self):
         self.event.wait()  # wait for the others
         expected_num_servers = len(self.servers)
-        for x in xrange(self.num_commands):
+        for x in range(self.num_commands):
             try:
                 self.client.sql('select name from sys.cluster')
             except ConnectionError:
@@ -298,7 +302,7 @@ class ThreadSafeHttpClientTest(TestCase):
                 with self.client._lock:
                     num_servers = len(self.client._active_servers) + \
                         len(self.client._inactive_servers)
-                self.assertEquals(
+                self.assertEqual(
                     expected_num_servers,
                     num_servers,
                     "expected %d but got %d" % (expected_num_servers,
@@ -318,7 +322,7 @@ class ThreadSafeHttpClientTest(TestCase):
         """
         threads = [
             Thread(target=self._run, name=str(x))
-            for x in xrange(self.num_threads)
+            for x in range(self.num_threads)
         ]
         for thread in threads:
             thread.start()
@@ -332,9 +336,9 @@ class ThreadSafeHttpClientTest(TestCase):
                 traceback.format_exception(*self.err_queue.get(block=False))))
 
 
-class ClientAddressRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+class ClientAddressRequestHandler(BaseHTTPRequestHandler):
     """
-    http handler for use with BaseHTTPServer
+    http handler for use with HTTPServer
 
     returns client host and port in crate-conform-responses
     """
@@ -356,7 +360,7 @@ class ClientAddressRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.send_header("Content-Length", len(response))
         self.send_header("Content-Type", "application/json; charset=UTF-8")
         self.end_headers()
-        self.wfile.write(to_bytes(response, 'UTF-8'))
+        self.wfile.write(response.encode('UTF-8'))
 
     do_POST = do_PUT = do_DELETE = do_HEAD = do_GET
 
@@ -381,8 +385,8 @@ class KeepAliveClientTest(TestCase):
         super(KeepAliveClientTest, self).tearDown()
 
     def _run_server(self):
-        self.server = BaseHTTPServer.HTTPServer(self.server_address,
-                                                ClientAddressRequestHandler)
+        self.server = HTTPServer(self.server_address,
+                                 ClientAddressRequestHandler)
         self.server.handle_request()
 
     def test_client_keepalive(self):
@@ -397,10 +401,9 @@ class ParamsTest(TestCase):
 
     def test_params(self):
         client = Client(['127.0.0.1:4200'], error_trace=True)
-        from six.moves.urllib.parse import urlparse, parse_qs
         parsed = urlparse(client.path)
         params = parse_qs(parsed.query)
-        self.assertEquals(params["error_trace"], ["1"])
+        self.assertEqual(params["error_trace"], ["true"])
         client.close()
 
     def test_no_params(self):
@@ -411,14 +414,16 @@ class ParamsTest(TestCase):
 
 class RequestsCaBundleTest(TestCase):
 
+
     def test_open_client(self):
-        os.environ["REQUESTS_CA_BUNDLE"] = "/etc/ssl/certs/ca-certificates.crt"
+        os.environ["REQUESTS_CA_BUNDLE"] = CA_CERT_PATH
         try:
             Client('http://127.0.0.1:4200')
         except ProgrammingError:
             self.fail("HTTP not working with REQUESTS_CA_BUNDLE")
         finally:
             os.unsetenv('REQUESTS_CA_BUNDLE')
+            os.environ["REQUESTS_CA_BUNDLE"] = ''
 
     def test_remove_certs_for_non_https(self):
         d = _remove_certs_for_non_https('https', {"ca_certs": 1})
@@ -431,9 +436,9 @@ class RequestsCaBundleTest(TestCase):
         self.assertTrue('foobar' in d)
 
 
-class RetryRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+class RetryRequestHandler(BaseHTTPRequestHandler):
     """
-    http handler for use with BaseHTTPServer
+    http handler for use with HTTPServer
 
     counts request made
     """
@@ -441,14 +446,32 @@ class RetryRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_POST(self):
         self.server.SHARED['count'] += 1
 
+        if self.headers.get('Authorization') is not None:
+            credentials = b64decode(self.headers['Authorization'].replace('Basic ','')).decode('utf-8').split(":", 1)
+            self.server.SHARED['username'] = credentials[0]
+            if len(credentials) > 1 and credentials[1]:
+                self.server.SHARED['password'] = credentials[1]
+            else:
+                self.server.SHARED['password'] = None
+        else:
+            self.server.SHARED['username'] = None
 
-class TestingHTTPServer(BaseHTTPServer.HTTPServer):
+        if self.headers.get('X-User') is not None:
+            self.server.SHARED['usernameFromXUser'] = self.headers['X-User']
+        else:
+            self.server.SHARED['usernameFromXUser'] = None
+
+
+class TestingHTTPServer(HTTPServer):
     """
     http server providing a shared dict
     """
     manager = multiprocessing.Manager()
     SHARED = manager.dict()
     SHARED['count'] = 0
+    SHARED['usernameFromXUser'] = None
+    SHARED['username'] = None
+    SHARED['password'] = None
 
     @classmethod
     def run_server(cls, server_address):
@@ -478,3 +501,50 @@ class RetryOnTimeoutServerTest(TestCase):
         except ConnectionError:
             pass
         self.assertEqual(TestingHTTPServer.SHARED['count'], 1)
+
+
+class TestUsernameSentAsHeader(TestCase):
+
+    server_address = ("127.0.0.1", 62535)
+
+    def __init__(self, *args, **kwargs):
+        super(TestUsernameSentAsHeader, self).__init__(*args, **kwargs)
+        self.server_process = Process(target=TestingHTTPServer.run_server, args=(self.server_address,))
+
+    def setUp(self):
+        self.clientWithoutUsername = Client(["%s:%d" % self.server_address], timeout=5)
+        self.clientWithUsername = Client(["%s:%d" % self.server_address], timeout=5, username='testDBUser')
+        self.clientWithUsernameAndPassword = Client(["%s:%d" % self.server_address], timeout=5,
+                                                    username='testDBUser', password='test:password')
+        self.server_process.start()
+        time.sleep(.10)
+
+    def tearDown(self):
+        self.server_process.terminate()
+        self.clientWithoutUsername.close()
+        self.clientWithUsername.close()
+
+    def test_username(self):
+        try:
+            self.clientWithoutUsername.sql("select * from fake")
+        except ConnectionError:
+            pass
+        self.assertEqual(TestingHTTPServer.SHARED['usernameFromXUser'], None)
+        self.assertEqual(TestingHTTPServer.SHARED['username'], None)
+        self.assertEqual(TestingHTTPServer.SHARED['password'], None)
+
+        try:
+            self.clientWithUsername.sql("select * from fake")
+        except ConnectionError:
+            pass
+        self.assertEqual(TestingHTTPServer.SHARED['usernameFromXUser'], 'testDBUser')
+        self.assertEqual(TestingHTTPServer.SHARED['username'], 'testDBUser')
+        self.assertEqual(TestingHTTPServer.SHARED['password'], None)
+
+        try:
+            self.clientWithUsernameAndPassword.sql("select * from fake")
+        except ConnectionError:
+            pass
+        self.assertEqual(TestingHTTPServer.SHARED['usernameFromXUser'], 'testDBUser')
+        self.assertEqual(TestingHTTPServer.SHARED['username'], 'testDBUser')
+        self.assertEqual(TestingHTTPServer.SHARED['password'], 'test:password')

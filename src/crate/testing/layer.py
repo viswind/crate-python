@@ -44,7 +44,7 @@ log = logging.getLogger(__name__)
 
 CRATE_CONFIG_ERROR = 'crate_config must point to a folder or to a file named "crate.yml"'
 HTTP_ADDRESS_RE = re.compile(
-    '.*\[http +\] \[.*\] .*'
+    '.*\[(http|.*HttpServer.*)\s*] \[.*\] .*'
     'publish_address {'
     '(?:inet\[[\w\d\.-]*/|\[)?'
     '(?:[\w\d\.-]+/)?'
@@ -260,15 +260,13 @@ class CrateLayer(object):
                         further_settings=None):
         settings = {
             "discovery.type": "zen",
-            "cluster.routing.allocation.disk.watermark.low": "1b",
-            "cluster.routing.allocation.disk.watermark.high": "1b",
             "discovery.initial_state_timeout": 0,
             "node.name": node_name,
             "cluster.name": cluster_name,
             "network.host": host,
             "http.port": http_port,
             "path.conf": os.path.dirname(crate_config),
-            "transport.tcp.port": transport_port
+            "transport.tcp.port": transport_port,
         }
         if further_settings:
             settings.update(further_settings)

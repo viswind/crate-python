@@ -19,9 +19,9 @@
 # with Crate these terms will supersede the license and you may use the
 # software solely pursuant to the terms of the relevant commercial agreement.
 
-from unittest import TestCase
 from datetime import datetime
-from mock import patch, MagicMock
+from unittest import TestCase
+from unittest.mock import patch, MagicMock
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
@@ -40,7 +40,7 @@ FakeCursor.return_value = fake_cursor
 class SqlAlchemyInsertFromSelectTest(TestCase):
 
     def assertSQL(self, expected_str, actual_expr):
-        self.assertEquals(expected_str, str(actual_expr).replace('\n', ''))
+        self.assertEqual(expected_str, str(actual_expr).replace('\n', ''))
 
     def setUp(self):
         self.engine = sa.create_engine('crate://')

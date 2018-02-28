@@ -21,7 +21,7 @@
 
 from __future__ import absolute_import
 from unittest import TestCase
-from mock import patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 import sqlalchemy as sa
 from sqlalchemy.sql import select
@@ -47,7 +47,7 @@ class SqlAlchemyDictTypeTest(TestCase):
                                 sa.Column('data', Craty))
 
     def assertSQL(self, expected_str, actual_expr):
-        self.assertEquals(expected_str, str(actual_expr).replace('\n', ''))
+        self.assertEqual(expected_str, str(actual_expr).replace('\n', ''))
 
     def test_select_with_dict_column(self):
         mytable = self.mytable

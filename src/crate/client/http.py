@@ -25,19 +25,18 @@ import json
 import logging
 import os
 import io
-import sys
-import six
+import ssl
 import urllib3
 import urllib3.exceptions
 from urllib3.util.retry import Retry
+from base64 import b64encode
 from time import time
 from datetime import datetime, date
 from decimal import Decimal
 import calendar
 import threading
 import re
-import base64
-from six.moves.urllib.parse import urlparse
+from urllib.parse import urlparse
 from crate.client.exceptions import (
     ConnectionError,
     DigestNotFoundException,
@@ -48,8 +47,6 @@ from crate.client.exceptions import (
 
 logger = logging.getLogger(__name__)
 
-if sys.version_info[0] > 2:
-    basestring = str
 
 _HTTP_PAT = pat = re.compile('https?://.+', re.I)
 SRV_UNAVAILABLE_STATUSES = set((502, 503, 504, 509))
@@ -91,8 +88,8 @@ class CrateJsonEncoder(json.JSONEncoder):
 
 class Server(object):
 
-    def __init__(self, server, **kwargs):
-        self.pool = urllib3.connection_from_url(server, **kwargs)
+    def __init__(self, server, **pool_kw):
+        self.pool = urllib3.connection_from_url(server, **pool_kw)
         self.authorization_header = None
         match = re.match("^https?://(?P<username>.+):(?P<password>.+)@", server)
         if match:
@@ -105,10 +102,12 @@ class Server(object):
                 data=None,
                 stream=False,
                 headers=None,
+                username=None,
+                password=None,
                 **kwargs):
         """Send a request
 
-        Always set the Content-Length header.
+        Always set the Content-Length and the Content-Type header.
         """
         if headers is None:
             headers = {}
@@ -116,9 +115,23 @@ class Server(object):
             length = super_len(data)
             if length is not None:
                 headers['Content-Length'] = length
+
+        # Authentication credentials
+        if username is not None:
+            if 'Authorization' not in headers and username is not None:
+                credentials = username + ':'
+                if password is not None:
+                    credentials += password
+                headers['Authorization'] = 'Basic %s' % b64encode(credentials.encode('utf-8')).decode('utf-8')
+            # For backwards compatibility with Crate <= 2.2
+            if 'X-User' not in headers:
+                headers['X-User'] = username
+
         headers['Accept'] = 'application/json'
+        headers['Content-Type'] = 'application/json'
         if self.authorization_header:
             headers['Authorization'] = self.authorization_header
+
         kwargs['assert_same_host'] = False
         kwargs['redirect'] = False
         kwargs['retries'] = Retry(read=0)
@@ -137,11 +150,11 @@ class Server(object):
 
 def _json_from_response(response):
     try:
-        return json.loads(six.text_type(response.data, 'utf-8'))
+        return json.loads(response.data.decode('utf-8'))
     except ValueError:
         raise ProgrammingError(
-            "Invalid server response of content-type '%s'" %
-            response.headers.get("content-type", "unknown"))
+            "Invalid server response of content-type '{}':\n{}"
+            .format(response.headers.get("content-type", "unknown"), response.data.decode('utf-8')))
 
 
 def _blob_path(table, digest):
@@ -165,7 +178,7 @@ def _raise_for_status(response):
     if response.status == 503:
         raise ConnectionError(message)
     if response.headers.get("content-type", "").startswith("application/json"):
-        data = json.loads(six.text_type(response.data, 'utf-8'))
+        data = json.loads(response.data.decode('utf-8'))
         error = data.get('error', {})
         error_trace = data.get('error_trace', None)
         if "results" in data:
@@ -203,18 +216,21 @@ def _server_url(server):
 
 
 def _to_server_list(servers):
-    if isinstance(servers, basestring):
+    if isinstance(servers, str):
         servers = servers.split()
     return [_server_url(s) for s in servers]
 
 
-def _pool_kw_args(ca_cert, verify_ssl_cert):
+def _pool_kw_args(verify_ssl_cert, ca_cert, client_cert, client_key):
     ca_cert = ca_cert or os.environ.get('REQUESTS_CA_BUNDLE', None)
-    if not ca_cert:
-        return {}
+    if ca_cert and not os.path.exists(ca_cert):
+        # Sanity check
+        raise IOError('CA bundle file "{}" does not exist.'.format(ca_cert))
     return {
         'ca_certs': ca_cert,
-        'cert_reqs': 'REQUIRED' if verify_ssl_cert else 'NONE'
+        'cert_reqs': ssl.CERT_REQUIRED if verify_ssl_cert else ssl.CERT_NONE,
+        'cert_file' : client_cert,
+        'key_file' : client_key,
     }
 
 
@@ -230,7 +246,7 @@ def _remove_certs_for_non_https(server, kwargs):
 
 
 def _create_sql_payload(stmt, args, bulk_args):
-    if not isinstance(stmt, basestring):
+    if not isinstance(stmt, str):
         raise ValueError('stmt is not a string')
     if args and bulk_args:
         raise ValueError('Cannot provide both: args and bulk_args')
@@ -262,42 +278,44 @@ class Client(object):
     def __init__(self,
                  servers=None,
                  timeout=None,
-                 ca_cert=None,
                  verify_ssl_cert=False,
+                 ca_cert=None,
                  error_trace=False,
                  cert_file=None,
-                 key_file=None):
+                 key_file=None,
+                 username=None,
+                 password=None):
         if not servers:
             servers = [self.default_server]
         else:
             servers = _to_server_list(servers)
         self._active_servers = servers
         self._inactive_servers = []
-        self._http_timeout = timeout
-        pool_kw = _pool_kw_args(ca_cert, verify_ssl_cert)
-        pool_kw['cert_file'] = cert_file
-        pool_kw['key_file'] = key_file
+        pool_kw = _pool_kw_args(verify_ssl_cert, ca_cert, cert_file, key_file)
+        pool_kw['timeout'] = timeout
         self.server_pool = {}
-        self._update_server_pool(servers, timeout=timeout, **pool_kw)
+        self._update_server_pool(servers, **pool_kw)
         self._pool_kw = pool_kw
         self._lock = threading.RLock()
         self._local = threading.local()
+        self.username = username
+        self.password = password
 
         self.path = self.SQL_PATH
         if error_trace:
-            self.path += '?error_trace=1'
+            self.path += '?error_trace=true'
 
     def close(self):
         for server in self.server_pool.values():
             server.close()
 
-    def _create_server(self, server, **kwargs):
-        kwargs = _remove_certs_for_non_https(server, kwargs)
+    def _create_server(self, server, **pool_kw):
+        kwargs = _remove_certs_for_non_https(server, pool_kw)
         self.server_pool[server] = Server(server, **kwargs)
 
-    def _update_server_pool(self, servers, **kwargs):
+    def _update_server_pool(self, servers, **pool_kw):
         for server in servers:
-            self._create_server(server, **kwargs)
+            self._create_server(server, **pool_kw)
 
     def sql(self, stmt, parameters=None, bulk_parameters=None):
         """
@@ -387,7 +405,7 @@ class Client(object):
             next_server = server or self._get_server()
             try:
                 response = self.server_pool[next_server].request(
-                    method, path, **kwargs)
+                    method, path, username=self.username, password=self.password, **kwargs)
                 redirect_location = response.get_redirect_location()
                 if redirect_location and 300 <= response.status <= 308:
                     redirect_server = _server_url(redirect_location)
@@ -420,6 +438,7 @@ class Client(object):
         """
         Issue request against the crate HTTP API.
         """
+
         response = self._request(method, path, data=data)
         _raise_for_status(response)
         if len(response.data) > 0:

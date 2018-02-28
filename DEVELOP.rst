@@ -45,18 +45,34 @@ Preparing a Release
 
 To create a new release, you must:
 
+- Backport your bug fixes to the latest stable branch x.y (e.g. 0.19)
+
+- For new features, create a new stable branch x.(y+1) (e.g. 0.20)
+
+In the release branch:
+
 - Update ``__version__`` in ``src/crate/client/__init__.py``
 
 - Add a section for the new version in the ``CHANGES.txt`` file
 
 - Commit your changes with a message like "prepare release x.y.z"
 
-- Push to origin
+- Push to origin/<release_branch>
 
 - Create a tag by running ``./devtools/create_tag.sh``
 
+On master:
+
+- Update the release notes to reflect the release
+
+Next:
+
+- Deploy to PyPI (see section below)
+
+- Archive docs for old releases (see section below)
+
 PyPI Deployment
-===============
+---------------
 
 To create the package use::
 
@@ -85,6 +101,20 @@ If you want to check the PyPI description before uploading, run::
 
     $ bin/py setup.py check --strict --restructuredtext
 
+Archiving Docs Versions
+-----------------------
+
+Check the `versions hosted on ReadTheDocs`_.
+
+We should only be hosting the docs for `latest`, `stable`, and the most recent
+patch versions for the last two minor releases.
+
+Sometimes you might find that there are multiple older releases that need to be
+archived.
+
+You can archive releases by selecting *Edit*, unselecting the *Active*
+checkbox, and then saving.
+
 Writing Documentation
 =====================
 
@@ -109,3 +139,4 @@ nothing special you need to do to get the live docs to update.
 .. _tox: http://testrun.org/tox/latest/
 .. _twine: https://pypi.python.org/pypi/twine
 .. _zope.testrunner: https://pypi.python.org/pypi/zope.testrunner/4.4.1
+.. _versions hosted on ReadTheDocs: https://readthedocs.org/projects/crate-python/versions/

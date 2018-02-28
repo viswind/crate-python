@@ -1,11 +1,16 @@
-==================
-Crate Client Usage
-==================
+============
+Client Usage
+============
+
+.. rubric:: Table of Contents
+
+.. contents::
+   :local:
 
 Connect to a Database
 =====================
 
-Before we can start we have to import the crate client::
+Before we can start we have to import the client::
 
     >>> from crate import client
 
@@ -14,10 +19,10 @@ connection, the first argument is the url of the server to connect to::
 
     >>> connection = client.connect(crate_host)
 
-Crate is a clustered database providing high availability through replication.
-In order for clients to make use of this property it is recommended to specify
-all hosts of the cluster. This way if a server does not respond, the request is
-automatically routed to the next server::
+CrateDB is a clustered database providing high availability through
+replication. In order for clients to make use of this property it is
+recommended to specify all hosts of the cluster. This way if a server does not
+respond, the request is automatically routed to the next server::
 
     >>> invalid_host = 'http://not_responding_host:4200'
     >>> connection = client.connect([invalid_host, crate_host])
@@ -39,8 +44,31 @@ using the optional parameter ``timeout``::
 
     >>> connection = client.connect([crate_host, invalid_host], timeout=5)
 
+Authentication
+--------------
+
+Users that are trusted as by definition of the ``auth.host_based.config``
+setting do not need a password, but only require the ``username`` argument to
+connect::
+
+    >>> connection = client.connect([crate_host],
+    ...                             username='trusted_me')
+
+To connect to CrateDB with as a user that requires password authentication, you
+also need to provide ``password`` as argument for the ``connect()`` call::
+
+    >>> connection = client.connect([crate_host],
+    ...                             username='me',
+    ...                             password='my_secret_pw')
+
 Inserting Data
 ==============
+
+.. hide::
+
+   Use user "crate" for rest of the tests::
+
+    >>> connection = client.connect([crate_host], timeout=2)
 
 Before executing any statement a cursor has to be opened to perform
 database operations::
@@ -50,7 +78,7 @@ database operations::
     ... (name, date, kind, position) VALUES (?, ?, ?, ?)""",
     ...                ('Einstein Cross', '2007-03-11', 'Quasar', 7))
 
-To bulk insert data you can use the `executemany` function::
+To bulk insert data you can use the ``executemany`` function::
 
     >>> cursor.executemany("""INSERT INTO locations
     ... (name, date, kind, position) VALUES (?, ?, ?, ?)""",
@@ -58,20 +86,20 @@ To bulk insert data you can use the `executemany` function::
     ...                 ('Old Faithful', '2007-03-11', 'Quasar', 7)])
     [{u'rowcount': 1}, {u'rowcount': 1}]
 
-`executemany` returns a list of results for every parameter. Each result
+``executemany`` returns a list of results for every parameter. Each result
 contains a rowcount. If an error occures the rowcount is -2 and the result
-may contain an `error_message` depending on the error.
+may contain an ``error_message`` depending on the error.
 
 .. note::
 
-    If you are using a crate server version older than 0.42.0 the client
+    If you are using a CrateDB server version older than 0.42.0 the client
     will execute a single sql statement for every parameter in the parameter
     sequence when you are using executemany. In this case, executemany doesn't
     return any value. To avoid that overhead you can
     use ``execute`` and make use of multiple rows in the INSERT
     statement and provide a list of arguments with the length of
     ``number of inserted records * number of columns``::
-    
+
         >>> cursor.execute("""INSERT INTO locations
         ... (name, date, kind, position) VALUES (?, ?, ?, ?), (?, ?, ?, ?)""",
         ...                ('Creameries', '2007-03-11', 'Quasar', 7,
@@ -132,7 +160,7 @@ It's also possible to change the cursors arraysize to an other value::
 fetchall()
 ----------
 
-``fetchall()`` returns a list of all remaining rows:: 
+``fetchall()`` returns a list of all remaining rows::
 
     >>> cursor.execute("SELECT name FROM locations order by name")
     >>> result = cursor.fetchall()
@@ -220,7 +248,7 @@ will be raised::
     ...
     ProgrammingError: Connection closed
 
-    >>> cursor = connection.cursor() 
+    >>> cursor = connection.cursor()
     Traceback (most recent call last):
     ...
     ProgrammingError: Connection closed

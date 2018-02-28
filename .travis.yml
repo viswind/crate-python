@@ -1,8 +1,6 @@
 language: python
 cache: pip
 python:
-  - 2.7
-  - 3.3
   - 3.4
   - 3.5
   - 3.6
@@ -14,14 +12,16 @@ addons:
     packages:
       - oracle-java8-set-default
 before_install:
+  # clean existing dependencies to avoid clashes
+  - pip freeze | xargs pip uninstall -y
   - pip install --upgrade setuptools
 install:
   - python bootstrap.py
   - sed -ir "s/SQLAlchemy.*/SQLAlchemy = ${SA_VERSION}/g" versions.cfg
   - bin/buildout -c base.cfg
 env:
-  - SA_VERSION=1.0.16
-  - SA_VERSION=1.1.4
+  - SA_VERSION=1.1.15
+  - SA_VERSION=1.2.0
 matrix:
   allow_failures:
     - python: nightly
