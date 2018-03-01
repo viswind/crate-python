@@ -107,7 +107,7 @@ class DateTime(sqltypes.DateTime):
                 assert isinstance(value, datetime)
                 if value.tzinfo is not None:
                     raise TimezoneUnawareException(DateTime.TZ_ERROR_MSG)
-                return value.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                return int(value.timestamp() * 1000)
             return value
         return process
 
