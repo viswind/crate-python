@@ -20,7 +20,7 @@
 # software solely pursuant to the terms of the relevant commercial agreement.
 
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 from sqlalchemy import types as sqltypes
 from sqlalchemy.engine import default, reflection
@@ -107,7 +107,8 @@ class DateTime(sqltypes.DateTime):
                 assert isinstance(value, datetime)
                 if value.tzinfo is not None:
                     raise TimezoneUnawareException(DateTime.TZ_ERROR_MSG)
-                return int(value.timestamp() * 1000)
+                value_utc = value.replace(tzinfo=timezone.utc)
+                return int(value_utc.timestamp() * 1000)
             return value
         return process
 
