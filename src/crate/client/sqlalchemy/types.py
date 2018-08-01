@@ -24,7 +24,9 @@ from sqlalchemy.sql import operators, expression
 from sqlalchemy.sql import default_comparator
 from sqlalchemy.ext.mutable import Mutable
 
+
 class MutableList(Mutable, list):
+
     @classmethod
     def coerce(cls, key, value):
         """ Convert plain list to MutableList """
@@ -45,16 +47,15 @@ class MutableList(Mutable, list):
         list.__setitem__(self, key, value)
         self.changed()
 
+    def __eq__(self, other):
+        return list.__eq__(self, other)
+
     def append(self, item):
         list.append(self, item)
         self.changed()
 
     def insert(self, idx, item):
         list.insert(self, idx, item)
-        self.changed()
-
-    def __setslice__(self, i, j, other):
-        list.__setslice__(self, i, j, other)
         self.changed()
 
     def extend(self, iterable):
@@ -123,6 +124,9 @@ class MutableDict(Mutable, dict):
         if isinstance(value, dict) and not isinstance(value, MutableDict):
             return MutableDict(value, self.to_update, overwrite_key)
         return value
+
+    def __eq__(self, other):
+        return dict.__eq__(self, other)
 
 
 class _Craty(sqltypes.UserDefinedType):
@@ -207,6 +211,9 @@ class _ObjectArray(sqltypes.UserDefinedType):
 
     type = MutableList
     comparator_factory = Comparator
+
+    def get_col_spec(self, **kws):
+        return "ARRAY(OBJECT)"
 
 
 ObjectArray = MutableList.as_mutable(_ObjectArray)

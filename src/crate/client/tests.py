@@ -51,7 +51,8 @@ from .test_http import (
     ParamsTest,
     RetryOnTimeoutServerTest,
     RequestsCaBundleTest,
-    TestUsernameSentAsHeader
+    TestUsernameSentAsHeader,
+    TestDefaultSchemaHeader,
 )
 from .sqlalchemy.tests import test_suite as sqlalchemy_test_suite
 from .sqlalchemy.types import ObjectArray
@@ -126,6 +127,7 @@ def refresh(table):
     with connect(crate_host) as conn:
         cursor = conn.cursor()
         cursor.execute("refresh table %s" % table)
+
 
 def setUpWithCrateLayer(test):
     test.globs['HttpClient'] = http.Client
@@ -308,8 +310,8 @@ def test_suite():
     ])
 
     s = doctest.DocFileSuite(
-        'cursor.txt',
-        'connection.txt',
+        'doctests/cursor.txt',
+        'doctests/connection.txt',
         checker=checker,
         setUp=setUpMocked,
         optionflags=flags,
@@ -325,12 +327,13 @@ def test_suite():
     suite.addTest(unittest.makeSuite(RetryOnTimeoutServerTest))
     suite.addTest(unittest.makeSuite(RequestsCaBundleTest))
     suite.addTest(unittest.makeSuite(TestUsernameSentAsHeader))
+    suite.addTest(unittest.makeSuite(TestDefaultSchemaHeader))
     suite.addTest(sqlalchemy_test_suite())
     suite.addTest(doctest.DocTestSuite('crate.client.connection'))
     suite.addTest(doctest.DocTestSuite('crate.client.http'))
 
     s = doctest.DocFileSuite(
-        '../../../docs/https.txt',
+        'doctests/https.txt',
         checker=checker,
         setUp=setUpWithHttps,
         optionflags=flags,
@@ -340,9 +343,9 @@ def test_suite():
     suite.addTest(s)
 
     s = doctest.DocFileSuite(
-        'sqlalchemy/itests.txt',
-        'sqlalchemy/dialect.txt',
-        'sqlalchemy/reflection.txt',
+        'sqlalchemy/doctests/itests.txt',
+        'sqlalchemy/doctests/dialect.txt',
+        'sqlalchemy/doctests/reflection.txt',
         checker=checker,
         setUp=setUpCrateLayerAndSqlAlchemy,
         tearDown=tearDownWithCrateLayer,
@@ -353,11 +356,11 @@ def test_suite():
     suite.addTest(s)
 
     s = doctest.DocFileSuite(
-        'http.txt',
-        'blob.txt',
-        '../../../docs/client.txt',
-        '../../../docs/advanced_usage.txt',
-        '../../../docs/blobs.txt',
+        'doctests/http.txt',
+        'doctests/blob.txt',
+        'doctests/client.txt',
+        'doctests/mocking.txt',
+        'doctests/blob.txt',
         checker=checker,
         setUp=setUpWithCrateLayer,
         tearDown=tearDownWithCrateLayer,
@@ -368,7 +371,7 @@ def test_suite():
     suite.addTest(s)
 
     s = doctest.DocFileSuite(
-        '../../../docs/sqlalchemy.txt',
+        'doctests/sqlalchemy.txt',
         checker=checker,
         setUp=setUpCrateLayerAndSqlAlchemy,
         tearDown=tearDownWithCrateLayer,

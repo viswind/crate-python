@@ -22,7 +22,6 @@
 
 import os
 import re
-import socket
 import unittest
 import doctest
 import tempfile
@@ -32,6 +31,7 @@ from .test_layer import LayerUtilsTest
 
 def docs_path(*parts):
     return os.path.join(os.path.dirname(os.path.dirname(__file__)), *parts)
+
 
 def crate_path(*parts):
     return os.path.abspath(docs_path('..', '..', 'parts', 'crate', *parts))
@@ -50,7 +50,7 @@ def test_suite():
         (re.compile(r"<type "), "<class "),
     ])
 
-    s = doctest.DocFileSuite('layer.txt',
+    s = doctest.DocFileSuite('doctests/layer.txt',
                              setUp=setUp,
                              optionflags=doctest.NORMALIZE_WHITESPACE |
                              doctest.ELLIPSIS,

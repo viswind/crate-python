@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 
 _HTTP_PAT = pat = re.compile('https?://.+', re.I)
 SRV_UNAVAILABLE_STATUSES = set((502, 503, 504, 509))
+PRESERVE_ACTIVE_SERVER_EXCEPTIONS = set((ConnectionResetError, BrokenPipeError))
 SSL_ONLY_ARGS = set(('ca_certs', 'cert_reqs', 'cert_file', 'key_file'))
 
 
@@ -104,6 +105,7 @@ class Server(object):
                 headers=None,
                 username=None,
                 password=None,
+                schema=None,
                 **kwargs):
         """Send a request
 
@@ -127,6 +129,8 @@ class Server(object):
             if 'X-User' not in headers:
                 headers['X-User'] = username
 
+        if schema is not None:
+            headers['Default-Schema'] = schema
         headers['Accept'] = 'application/json'
         headers['Content-Type'] = 'application/json'
         if self.authorization_header:
@@ -229,8 +233,8 @@ def _pool_kw_args(verify_ssl_cert, ca_cert, client_cert, client_key):
     return {
         'ca_certs': ca_cert,
         'cert_reqs': ssl.CERT_REQUIRED if verify_ssl_cert else ssl.CERT_NONE,
-        'cert_file' : client_cert,
-        'key_file' : client_key,
+        'cert_file': client_cert,
+        'key_file': client_key,
     }
 
 
@@ -284,7 +288,8 @@ class Client(object):
                  cert_file=None,
                  key_file=None,
                  username=None,
-                 password=None):
+                 password=None,
+                 schema=None):
         if not servers:
             servers = [self.default_server]
         else:
@@ -300,6 +305,7 @@ class Client(object):
         self._local = threading.local()
         self.username = username
         self.password = password
+        self.schema = schema
 
         self.path = self.SQL_PATH
         if error_trace:
@@ -405,7 +411,7 @@ class Client(object):
             next_server = server or self._get_server()
             try:
                 response = self.server_pool[next_server].request(
-                    method, path, username=self.username, password=self.password, **kwargs)
+                    method, path, username=self.username, password=self.password, schema=self.schema, **kwargs)
                 redirect_location = response.get_redirect_location()
                 if redirect_location and 300 <= response.status <= 308:
                     redirect_server = _server_url(redirect_location)
@@ -428,9 +434,16 @@ class Client(object):
                     raise ConnectionError(
                         "Server not available, exception: %s" % ex_message
                     )
-                with self._lock:
-                    # drop server from active ones
-                    self._drop_server(next_server, ex_message)
+                preserve_server = False
+                if isinstance(ex, urllib3.exceptions.ProtocolError):
+                    preserve_server = any(
+                        t in [type(arg) for arg in ex.args]
+                        for t in PRESERVE_ACTIVE_SERVER_EXCEPTIONS
+                    )
+                if (not preserve_server):
+                    with self._lock:
+                        # drop server from active ones
+                        self._drop_server(next_server, ex_message)
             except Exception as e:
                 raise ProgrammingError(_ex_to_message(e))
 
