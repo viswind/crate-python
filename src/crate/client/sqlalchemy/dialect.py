@@ -151,7 +151,9 @@ class CrateDialect(default.DefaultDialect):
     ddl_compiler = CrateDDLCompiler
     type_compiler = CrateTypeCompiler
     supports_native_boolean = True
+    supports_native_decimal = True
     colspecs = colspecs
+    driver = 'crate'
 
     def __init__(self, *args, **kwargs):
         super(CrateDialect, self).__init__(*args, **kwargs)
