@@ -95,7 +95,7 @@ class Server(object):
         match = re.match("^https?://(?P<username>.+):(?P<password>.+)@", server)
         if match:
             auth = '{0}:{1}'.format(match.group('username'),match.group('password'))
-            self.authorization_header = 'Basic {0}'.format(base64.b64encode(auth.encode()).decode())
+            self.authorization_header = 'Basic {0}'.format(b64encode(auth.encode()).decode())
 
     def request(self,
                 method,
