@@ -280,8 +280,12 @@ class CrateCompiler(compiler.SQLCompiler):
         
         if self.update_on_duplicate:
             to_update = []
+            if isinstance(self.update_on_duplicate, dict):
+                except_cols = self.update_on_duplicate.get('except', [])
+            else:
+                except_cols = []
             for col, val in crud_params:
-                if not col.primary_key:
+                if not (col.primary_key or col.name in except_cols):
                     to_update.append("%s = VALUES(%s)" % (col.name, col.name))
                     
             text += " ON DUPLICATE KEY UPDATE %s" % ', '.join(to_update)
