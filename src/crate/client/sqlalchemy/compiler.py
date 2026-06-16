@@ -28,8 +28,6 @@ from sqlalchemy.sql import compiler
 from .types import MutableDict
 from .sa_version import SA_1_1, SA_VERSION
 
-ON_CONFLICT_MIN_VERSION = (4, 0, 0)
-
 
 def rewrite_update(clauseelement, multiparams, params):
     """ change the params to enable partial updates
@@ -286,35 +284,18 @@ class CrateCompiler(compiler.SQLCompiler):
             else:
                 except_cols = []
 
-            # CrateDB 4.0+ uses PostgreSQL-style `ON CONFLICT ... DO UPDATE SET col = ...;
-            # older versions uses the MySQL-style `ON DUPLICATE KEY UPDATE`
-            # Pick the right form based on the connected server's version.
-            # ``server_version_info`` is None only when compiling without a live connection,
-            # in which case we default to the modern syntax.
-            server_version_info = self.dialect.server_version_info
-            use_on_conflict = (
-                server_version_info is None or
-                server_version_info >= ON_CONFLICT_MIN_VERSION
-            )
-
+            # CrateDB uses PostgreSQL-style `ON CONFLICT (pk) DO UPDATE SET
+            # col = excluded.col`. This is supported across all server versions
+            # we target (verified back to CrateDB 3.x), so a single code path
+            # is sufficient.
             to_update = []
             for col, val in crud_params:
                 if not (col.primary_key or col.name in except_cols):
-                    if use_on_conflict:
-                        to_update.append(
-                            "%s = excluded.%s" % (col.name, col.name))
-                    else:
-                        to_update.append(
-                            "%s = VALUES(%s)" % (col.name, col.name))
+                    to_update.append("%s = excluded.%s" % (col.name, col.name))
 
-            if use_on_conflict:
-                pk_cols = [col.name for col, val in crud_params
-                           if col.primary_key]
-                text += " ON CONFLICT (%s) DO UPDATE SET %s" % (
-                    ', '.join(pk_cols), ', '.join(to_update))
-            else:
-                text += " ON DUPLICATE KEY UPDATE %s" % ', '.join(to_update)
-
+            pk_cols = [col.name for col, val in crud_params if col.primary_key]
+            text += " ON CONFLICT (%s) DO UPDATE SET %s" % (
+                ', '.join(pk_cols), ', '.join(to_update))
 
         if self.returning and not self.returning_precedes_values:
             text += " " + returning_clause
