@@ -277,19 +277,25 @@ class CrateCompiler(compiler.SQLCompiler):
         else:
             text += " VALUES (%s)" % \
                 ', '.join([c[1] for c in crud_params])
-        
+
         if self.update_on_duplicate:
-            to_update = []
             if isinstance(self.update_on_duplicate, dict):
                 except_cols = self.update_on_duplicate.get('except', [])
             else:
                 except_cols = []
+
+            # CrateDB uses PostgreSQL-style `ON CONFLICT (pk) DO UPDATE SET
+            # col = excluded.col`. This is supported across all server versions
+            # we target (verified back to CrateDB 3.x), so a single code path
+            # is sufficient.
+            to_update = []
             for col, val in crud_params:
                 if not (col.primary_key or col.name in except_cols):
-                    to_update.append("%s = VALUES(%s)" % (col.name, col.name))
-                    
-            text += " ON DUPLICATE KEY UPDATE %s" % ', '.join(to_update)
-        
+                    to_update.append("%s = excluded.%s" % (col.name, col.name))
+
+            pk_cols = [col.name for col, val in crud_params if col.primary_key]
+            text += " ON CONFLICT (%s) DO UPDATE SET %s" % (
+                ', '.join(pk_cols), ', '.join(to_update))
 
         if self.returning and not self.returning_precedes_values:
             text += " " + returning_clause
